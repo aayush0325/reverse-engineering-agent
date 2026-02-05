@@ -1,0 +1,14 @@
+[project]
+name = "reverse-engineering-agent"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "langchain>=1.2.8",
+    "langchain-google-genai>=4.2.0",
+    "langchain-groq>=1.1.2",
+    "langgraph>=1.0.7",
+    "pexpect>=4.9.0",
+    "python-dotenv>=1.2.1",
+]
