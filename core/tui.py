@@ -1,7 +1,24 @@
 import asyncio
+import re
 from typing import Any, Dict, List, Optional
 
 from textual.app import App, ComposeResult
+
+# Pattern to match ANSI escape codes
+ANSI_ESCAPE_PATTERN = re.compile(r'\x1b\[[0-9;]*[a-zA-Z]|\x1b\][^\x07]*\x07|\x1b[PX^_][^\x1b]*\x1b\\')
+
+def sanitize_output(text: str) -> str:
+    """Strip ANSI escape codes and control characters from text for clean TUI display."""
+    if not text:
+        return ""
+    # Remove ANSI escape sequences
+    text = ANSI_ESCAPE_PATTERN.sub('', text)
+    # Remove other control characters except newlines and tabs
+    text = ''.join(c if c == '\n' or c == '\t' or (ord(c) >= 32 and ord(c) < 127) or ord(c) >= 160 else ' ' for c in text)
+    # Collapse multiple spaces
+    text = re.sub(r' +', ' ', text)
+    return text.strip()
+
 from textual.containers import Container, Horizontal, Vertical, ScrollableContainer, VerticalScroll
 from textual.widgets import Header, Footer, Static, DataTable, RichLog, TabbedContent, TabPane, ProgressBar, Label, LoadingIndicator
 from textual.reactive import reactive
@@ -48,7 +65,7 @@ class PlanStepWidget(Horizontal):
         yield Label(f"[{status_style}]{status}[/]", classes="step-status")
 
 class ToolCallWidget(Vertical):
-    """A widget for a structured tool call entry."""
+    """A widget for a structured tool call entry with scrollable output."""
     def __init__(self, entry: Dict[str, Any]):
         self.entry = entry
         super().__init__(classes="tool-call-item")
@@ -61,22 +78,32 @@ class ToolCallWidget(Vertical):
         
         yield Label(f"[bold magenta]Tool:[/] [b]{tool}[/b]", classes="tool-header")
         
-        with Vertical(classes="tool-io"):
-            yield Label("[dim]Input:[/]")
-            if isinstance(inputs, dict):
-                for k, v in inputs.items():
-                    yield Label(f"  [cyan]{k}[/]: {v}")
-            else:
-                yield Label(f"  {inputs}")
-            
-            if output:
-                yield Label("\n[dim]Output:[/]")
-                # Truncate very long outputs for the list view
-                short_output = output[:1000] + ("..." if len(output) > 1000 else "")
-                yield Label(short_output, classes="tool-output")
+        # Input section
+        with Vertical(classes="tool-section"):
+            yield Label("[dim]Input:[/]", classes="section-label")
+            with Vertical(classes="tool-input-content"):
+                if isinstance(inputs, dict):
+                    for k, v in inputs.items():
+                        # Sanitize and handle long values
+                        val_str = sanitize_output(str(v))
+                        yield Static(f"[cyan]{k}[/]: {val_str}", classes="input-line")
+                else:
+                    yield Static(sanitize_output(str(inputs)), classes="input-line")
+        
+        # Output section with scrollable container for long outputs
+        if output:
+            # Sanitize output to remove ANSI codes from tools like gdb
+            clean_output = sanitize_output(str(output))
+            with Vertical(classes="tool-section"):
+                yield Label("[dim]Output:[/]", classes="section-label")
+                with ScrollableContainer(classes="tool-output-scroll"):
+                    yield Static(clean_output, classes="tool-output")
                 
-            if error:
-                yield Label(f"\n[bold red]Error:[/] {error}")
+        # Error section
+        if error:
+            clean_error = sanitize_output(str(error))
+            with Vertical(classes="tool-section tool-error-section"):
+                yield Static(f"[bold red]Error:[/] {clean_error}", classes="tool-error")
 
 class AgentApp(App):
     """Textual TUI for the Reverse Engineering Agent."""
@@ -165,17 +192,55 @@ class AgentApp(App):
         margin-bottom: 2;
         padding: 1;
         height: auto;
+        width: 100%;
     }
     .tool-header {
         color: #cba6f7;
         margin-bottom: 1;
+        text-style: bold;
     }
-    .tool-io {
+    .tool-section {
         padding-left: 1;
+        width: 100%;
+        height: auto;
+        margin-bottom: 1;
+    }
+    .section-label {
+        color: #6c7086;
+        margin-bottom: 0;
+    }
+    .tool-input-content {
+        padding-left: 1;
+        width: 100%;
+        height: auto;
+    }
+    .input-line {
+        text-wrap: wrap;
+        width: 100%;
+        color: #cdd6f4;
+    }
+    .tool-output-scroll {
+        max-height: 20;
+        height: auto;
+        width: 100%;
+        border: round #45475a;
+        background: #1e1e2e;
+        padding: 1;
     }
     .tool-output {
         color: #a6e3a1;
         text-wrap: wrap;
+        width: 100%;
+    }
+    .tool-error-section {
+        background: #302030;
+        padding: 1;
+        border: round #f38ba8;
+    }
+    .tool-error {
+        color: #f38ba8;
+        text-wrap: wrap;
+        width: 100%;
     }
     """
     
@@ -255,10 +320,19 @@ class AgentApp(App):
         obs_table = self.query_one("#obs-table", DataTable)
         obs_table.clear()
         obs = state.get("observations", {})
+        def safe_hex(val):
+            try:
+                if isinstance(val, str):
+                    if val.startswith("0x"): return val
+                    return hex(int(val))
+                return hex(val)
+            except:
+                return str(val)
+
         for s in obs.get("strings", []):
-            obs_table.add_row("String", f"{s.get('value')} (at {hex(s.get('offset', 0))})")
+            obs_table.add_row("String", f"{s.get('value')} (at {safe_hex(s.get('offset', 0))})")
         for c in obs.get("code", []):
-            obs_table.add_row("Code", f"Func at {hex(c.get('function_addr', 0))}: {c.get('summary')}")
+            obs_table.add_row("Code", f"Func at {safe_hex(c.get('function_addr', 0))}: {c.get('summary')}")
             
         # Update Findings Log
         findings_log = self.query_one("#findings-log", RichLog)
