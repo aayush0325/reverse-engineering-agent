@@ -18,7 +18,7 @@ Return a JSON object with the following structure:
       "step": 1,
       "title": "Step Title",
       "description": "Detailed description of what to do in this step",
-      "tool": "file | strings | hexdump | run_binary | gdb",
+      "tool": "file | strings | hexdump | run_binary | gdb | web_search",
       "rationale": "Why this step is important",
       "expected_outcome": "What should be achieved by this step",
       "dependencies": ["previous_step_id"],
@@ -41,6 +41,6 @@ Return a JSON object with the following structure:
 8. Identify potential risks and suggest mitigation strategies
 9. Provide an estimated timeline for the entire plan
 10. Ensure the output is valid JSON
-11. **Tool Usage**: Use 'strings' for initial extraction, 'hexdump' for raw inspection, 'run_binary' for testing inputs/hypotheses, and 'gdb' for deep dynamic analysis.
+11. **Tool Usage**: Use 'strings' for initial extraction, 'hexdump' for raw inspection, 'run_binary' for testing inputs/hypotheses, 'gdb' for deep dynamic analysis, and 'web_search' to look up external information like CVEs, library documentation, or error messages.
 
 Generate the reverse engineering plan now:"""

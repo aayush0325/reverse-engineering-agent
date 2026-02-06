@@ -4,7 +4,7 @@ from typing import Any, Dict, List
 from core.state import AgentState, ExecutionLogEntry
 from core.llm import get_llm, invoke_llm_with_retry
 from tools.static import file_tool, hexdump_tool, strings_tool
-from tools.dynamic import gdb_tool, run_binary_tool
+from tools.dynamic import gdb_tool, run_binary_tool, web_search_tool
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
 
@@ -42,7 +42,8 @@ def executor_agent(state: AgentState) -> AgentState:
         "strings": strings_tool,
         "hexdump": hexdump_tool,
         "gdb": gdb_tool,
-        "run_binary": run_binary_tool
+        "run_binary": run_binary_tool,
+        "web_search": web_search_tool
     }
 
     output = None
@@ -55,7 +56,7 @@ def executor_agent(state: AgentState) -> AgentState:
             tool_func = tool_map[tool_name]
             
             # Use LLM for tools that need complex input translation
-            if tool_name in ["gdb", "run_binary"]:
+            if tool_name in ["gdb", "run_binary", "web_search"]:
                 print(f"[EXECUTOR] Translating action to {tool_name} inputs...")
                 llm = get_llm(temperature=0.0)
                 
@@ -76,7 +77,7 @@ def executor_agent(state: AgentState) -> AgentState:
                     Last Tool Output: {last_output}
                     Output: {{"commands": ["cmd1", ...]}}
                     """
-                else: # run_binary
+                elif tool_name == "run_binary":
                     prompt_text = """
                     Convert action to execution arguments and stdin JSON.
                     IMPORTANT: If 'Last Tool Output' or 'Observations' suggest a prompt (e.g. 'Enter key:'), 
@@ -86,6 +87,14 @@ def executor_agent(state: AgentState) -> AgentState:
                     Observations: {observations}
                     Last Tool Output: {last_output}
                     Output: {{"cmd_args": ["--arg1", "val"], "stdin_data": "input string\\n"}}
+                    """
+                else: # web_search
+                    prompt_text = """
+                    Convert action to a specific web search query string.
+                    Action: {action}
+                    Observations: {observations}
+                    Last Tool Output: {last_output}
+                    Output: {{"query": "search query here"}}
                     """
                 
                 prompt = ChatPromptTemplate.from_template(prompt_text)
@@ -104,10 +113,13 @@ def executor_agent(state: AgentState) -> AgentState:
                 if tool_name == "gdb":
                     tool_input["commands"] = translation.get("commands", ["break main", "run", "quit"])
                     print(f"[EXECUTOR] GDB Commands: {tool_input['commands']}")
-                else:
+                elif tool_name == "run_binary":
                     tool_input["cmd_args"] = translation.get("cmd_args", [])
                     tool_input["stdin_data"] = translation.get("stdin_data")
                     print(f"[EXECUTOR] Args: {tool_input['cmd_args']}, Stdin: {tool_input['stdin_data']}")
+                elif tool_name == "web_search":
+                    tool_input["query"] = translation.get("query", next_step["action"])
+                    print(f"[EXECUTOR] Search Query: {tool_input['query']}")
                 
                 result = tool_func.invoke(tool_input)
             else:

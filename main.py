@@ -7,7 +7,7 @@ load_dotenv()
 
 from core.graph import create_graph
 from core.state import (
-    AgentState, TargetInfo, Goal, Observations, 
+    AgentState, TargetInfo, Goal, Observations,
     Artifacts, Confidence, Termination
 )
 from core.llm import set_llm_config

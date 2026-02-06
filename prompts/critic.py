@@ -31,7 +31,7 @@ Return a JSON object with the following structure:
   "new_steps": [
     {{
       "action": "New action to take if satisfied is false (e.g., 'Test if string X is the password using run_binary with stdin_data')",
-      "tool": "file/strings/hexdump/run_binary/gdb/unknown",
+      "tool": "file/strings/hexdump/run_binary/gdb/web_search/unknown",
       "rationale": "Why this step is needed"
     }}
   ]

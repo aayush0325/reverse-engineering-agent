@@ -73,6 +73,7 @@ def planner_agent(state: AgentState) -> AgentState:
             elif "hexdump" in tool: tool = "hexdump"
             elif "run" in tool: tool = "run_binary"
             elif "gdb" in tool: tool = "gdb"
+            elif "search" in tool or "web" in tool: tool = "web_search"
             
             print(f"  - Step {i+1}: {step.get('title')} ({tool})")
 

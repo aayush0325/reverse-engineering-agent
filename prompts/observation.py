@@ -46,7 +46,8 @@ Return a JSON object with the following structure:
    - Look for success messages like 'Access Granted', 'Correct', or specific output patterns that confirm the goal.
    - **IMPORTANT**: Identify any interactive prompts (e.g., 'Enter key:', 'Password:'). Explicitly note these prompts in 'notes' so the agent knows it must provide input next time.
    - Note the input that triggered this output (if any).
-6. Merge or append these findings to the existing state.
-7. Ensure the output is valid JSON.
+6. If the tool is 'web_search', summarize the findings found from the search results. Highlight any links, CVE IDs, or specific function documentation that might be relevant.
+7. Merge or append these findings to the existing state.
+8. Ensure the output is valid JSON.
 
 Analyze the tool output and provide the structured observations:"""
