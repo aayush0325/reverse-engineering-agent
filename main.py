@@ -11,95 +11,18 @@ from core.state import (
     Artifacts, Confidence, Termination
 )
 from core.llm import set_llm_config
+from core.tui import AgentApp
 
-def main():
-    parser = argparse.ArgumentParser(
-        description="Reverse Engineering Agent: An autonomous agent for binary analysis.",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  # Analyze a binary with a specific goal using Groq (default provider)
-  uv run python main.py --path ./example/demo --prompt "find the secret"
-
-  # Use Gemini for analysis
-  uv run python main.py --path ./example/demo --prompt "find the secret" --provider gemini
-
-  # Specify a specific model
-  uv run python main.py --path ./example/demo --prompt "find the secret" --provider gemini --model gemini-2.5-flash
-
-Note: Ensure your GROQ_API_KEY or GOOGLE_API_KEY is set in your environment or .env file.
-        """
-    )
-    parser.add_argument("--path", help="Path to the binary file to analyze")
-    parser.add_argument("--prompt", help="The reverse engineering goal or prompt")
-    parser.add_argument("--provider", default="groq", choices=["groq", "gemini"], help="LLM provider (default: groq)")
-    parser.add_argument("--model", help="Specific model name (optional)")
-    
-    if len(sys.argv) == 1:
-        parser.print_help()
-        sys.exit(0)
-
-    args = parser.parse_args()
-    
-    if not args.path or not args.prompt:
-        print("Error: Both --path and --prompt are required.")
-        parser.print_usage()
-        sys.exit(1)
-    
-    # Configure LLM provider and model
-    set_llm_config(args.provider, args.model)
-    
-    binary_path = os.path.abspath(args.path)
-    if not os.path.exists(binary_path):
-        print(f"Error: File not found at {binary_path}")
-        sys.exit(1)
-
-    if args.provider == "groq" and not os.environ.get("GROQ_API_KEY"):
-        print("Warning: GROQ_API_KEY environment variable is not set. Groq calls will fail.")
-    if args.provider == "gemini" and not os.environ.get("GOOGLE_API_KEY"):
-        print("Warning: GOOGLE_API_KEY environment variable is not set. Gemini calls will fail.")
-
-    # Initialize the starting state for the agent
-    initial_state: AgentState = {
-        "target": TargetInfo(
-            binary_path=binary_path,
-            binary_type="Unknown",
-            arch="Unknown",
-            os="Unknown",
-            stripped=None,
-            protections=[],
-            entrypoint=None
-        ),
-        "goal": Goal(
-            primary_objective=args.prompt,
-            sub_goals=[]
-        ),
-        "hypotheses": [],
-        "observations": Observations(strings=[], code=[], runtime=[]),
-        "artifacts": Artifacts(
-            decoded_strings=[], 
-            extracted_keys=[], 
-            decrypted_payloads=[], 
-            notes=[]
-        ),
-        "current_plan": [],
-        "execution_log": [],
-        "blockers": [],
-        "confidence": Confidence(understanding_level=0.0, unanswered_questions=[]),
-        "termination": Termination(satisfied=False, reason=None)
-    }
-
-    print(f"[*] Starting analysis for: {binary_path}")
-    print(f"[*] Goal: {args.prompt}")
+def run_console_agent(initial_state: AgentState):
+    """Original log-based agent execution."""
+    print(f"[*] Starting analysis for: {initial_state['target']['binary_path']}")
+    print(f"[*] Goal: {initial_state['goal']['primary_objective']}")
     print("-" * 50)
     
     try:
         # Create and compile the LangGraph
         graph = create_graph()
         
-        # Invoke the graph with the initial state
-        # In a real CLI, you might want to stream to show progress, 
-        # but invoke is the most straightforward for a single-pass run.
         print("[*] Running agentic loop...")
         final_state = graph.invoke(initial_state)
         
@@ -142,6 +65,88 @@ Note: Ensure your GROQ_API_KEY or GOOGLE_API_KEY is set in your environment or .
         import traceback
         traceback.print_exc()
         sys.exit(1)
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Reverse Engineering Agent: An autonomous agent for binary analysis.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Analyze a binary using TUI (default)
+  uv run python main.py --path ./example/demo --prompt "find the secret"
+
+  # Analyze a binary with logs only
+  uv run python main.py --path ./example/demo --prompt "find the secret" --logs
+
+  # Use Gemini for analysis
+  uv run python main.py --path ./example/demo --prompt "find the secret" --provider gemini
+        """
+    )
+    parser.add_argument("--path", help="Path to the binary file to analyze")
+    parser.add_argument("--prompt", help="The reverse engineering goal or prompt")
+    parser.add_argument("--provider", default="groq", choices=["groq", "gemini"], help="LLM provider (default: groq)")
+    parser.add_argument("--model", help="Specific model name (optional)")
+    parser.add_argument("--logs", action="store_true", help="Show logs instead of TUI")
+    
+    if len(sys.argv) == 1:
+        parser.print_help()
+        sys.exit(0)
+
+    args = parser.parse_args()
+    
+    if not args.path or not args.prompt:
+        print("Error: Both --path and --prompt are required.")
+        parser.print_usage()
+        sys.exit(1)
+    
+    # Configure LLM provider and model
+    set_llm_config(args.provider, args.model)
+    
+    binary_path = os.path.abspath(args.path)
+    if not os.path.exists(binary_path):
+        print(f"Error: File not found at {binary_path}")
+        sys.exit(1)
+
+    if args.provider == "groq" and not os.environ.get("GROQ_API_KEY"):
+        print("Warning: GROQ_API_KEY environment variable is not set. Groq calls will fail.")
+    if args.provider == "gemini" and not os.environ.get("GOOGLE_API_KEY"):
+        print("Warning: GOOGLE_API_KEY environment variable is not set. Gemini calls will fail.")
+
+    # Initialize the starting state for the agent
+    initial_state: AgentState = {
+        "target": {
+            "binary_path": binary_path,
+            "binary_type": "Unknown",
+            "arch": "Unknown",
+            "os": "Unknown",
+            "stripped": None,
+            "protections": [],
+            "entrypoint": None
+        },
+        "goal": {
+            "primary_objective": args.prompt,
+            "sub_goals": []
+        },
+        "hypotheses": [],
+        "observations": {"strings": [], "code": [], "runtime": []},
+        "artifacts": {
+            "decoded_strings": [], 
+            "extracted_keys": [], 
+            "decrypted_payloads": [], 
+            "notes": []
+        },
+        "current_plan": [],
+        "execution_log": [],
+        "blockers": [],
+        "confidence": {"understanding_level": 0.0, "unanswered_questions": []},
+        "termination": {"satisfied": False, "reason": None}
+    }
+
+    if args.logs:
+        run_console_agent(initial_state)
+    else:
+        app = AgentApp(initial_state)
+        app.run()
 
 if __name__ == "__main__":
     main()
